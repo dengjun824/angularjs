@@ -10,11 +10,9 @@ test.js
 
 pids
 logs
-results
 backup/
 node_modules/
 test/
-json/
 static/bower_components/
 static/cdn/
 

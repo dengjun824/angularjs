@@ -24,554 +24,544 @@ setReceive(userObj); 增加或减少用户接收的消息;
 setSend(userObj); 增加或减少用户发送的消息;
 setNewUser(userObj, callback); 注册新用户;
 */
-var noop = jsGen.lib.tools.noop,
-    union = jsGen.lib.tools.union,
-    intersect = jsGen.lib.tools.intersect,
-    UIDString = jsGen.lib.json.UIDString,
-    defautUser = jsGen.lib.json.User,
-    preAllocate = jsGen.lib.json.UserPre,
-    callbackFn = jsGen.lib.tools.callbackFn,
-    wrapCallback = jsGen.lib.tools.wrapCallback,
-    converter = jsGen.lib.converter,
-    users = jsGen.dao.db.bind('users');
 
-users.bind({
+var Thunk = require('thunks')(),
+  Baseco = require('Baseco'),
+  JSONKit = require('jsonkit'),
+  json = require('./lib/json.js'),
+  dao = require('./dao/mongoDao.js'),
+  collection = dao.db.bind('users'),
+  union = JSONKit.union,
+  intersect = JSONKit.intersect,
+  defautUser = json.User,
+  defautUser = json.User,
+  preAllocate = json.UserPre;
 
-    convertID: function (id) {
-        switch (typeof id) {
-        case 'string':
-            id = id.substring(1);
-            return converter(id, 26, UIDString);
-        case 'number':
-            id = jsGen.lib.converter(id, 26, UIDString);
-            while (id.length < 5) {
-                id = 'a' + id;
-            }
-            return 'U' + id;
-        default:
-            return null;
-        }
-    },
 
-    getUsersNum: function (callback) {
-        this.count(wrapCallback(callback));
-    },
+var baseco = new Baseco(62, json.UIDString);
 
-    getUsersIndex: function (callback) {
-        callback = callback || callbackFn;
-        this.find({}, {
-            sort: {
-                _id: -1
-            },
-            hint: {
-                _id: 1
-            },
-            fields: {
-                _id: 1,
-                name: 1,
-                email: 1,
-                avatar: 1
-            }
-        }).each(callback);
-    },
+exports.convertID = function (id) {
+  switch (typeof id) {
+    case 'string':
+      id = id.substring(1);
+      return baseco.gToD(id);
+    case 'number':
+      id = baseco.dToG(id);
+      while (id.length < 3) id = '0' + id;
+      return 'U' + id;
+  }
+};
 
-    getFullUsersIndex: function (callback) {
-        callback = callback || callbackFn;
-        this.find({}, {
-            sort: {
-                _id: -1
-            },
-            hint: {
-                _id: 1
-            }
-        }).each(callback);
-    },
+exports.getUsersNum = function (callback) {
+  return Thunk(function (callback) {
+    collection.count(callback);
+  });
+};
 
-    getLatestId: function (callback) {
-        callback = callback || callbackFn;
-        this.findOne({}, {
-            sort: {
-                _id: -1
-            },
-            hint: {
-                _id: 1
-            },
-            fields: {
-                _id: 1
-            }
-        }, callback);
-    },
+exports.getUsersIndex = function (iterator) {
+  return Thunk(function (callback) {
+    collection.find({}, {
+      sort: {
+        _id: -1
+      },
+      hint: {
+        _id: 1
+      },
+      fields: {
+        _id: 1,
+        name: 1,
+        email: 1,
+        avatar: 1
+      }
+    }).each(function (err, doc) {
+      if (doc) return iterator(doc);
+      callback(err);
+    });
+  });
+};
 
-    getAuth: function (_id, callback) {
-        this.findOne({
-            _id: +_id
-        }, {
-            fields: {
-                _id: 1,
-                passwd: 1,
-                resetKey: 1,
-                resetDate: 1,
-                loginAttempts: 1,
-                locked: 1
-            }
-        }, wrapCallback(callback));
-    },
+exports.getFullUsersIndex = function (iterator) {
+  return Thunk(function (callback) {
+    collection.find({}, {
+      sort: {
+        _id: -1
+      },
+      hint: {
+        _id: 1
+      }
+    }).each(function (err, doc) {
+      if (doc) return iterator(doc);
+      callback(err);
+    });
+  });
+};
 
-    getSocial: function (_id, callback) {
-        this.findOne({
-            _id: +_id
-        }, {
-            fields: {
-                name: 1,
-                email: 1,
-                social: 1
-            }
-        }, wrapCallback(callback));
-    },
+exports.getAuth = function (_id) {
+  return Thunk(function (callback) {
+    collection.findOne({
+      _id: _id
+    }, {
+      fields: {
+        _id: 1,
+        passwd: 1,
+        resetKey: 1,
+        resetDate: 1,
+        loginAttempts: 1,
+        locked: 1
+      }
+    }, callback);
+  });
+};
 
-    getUserInfo: function (_id, callback) {
-        this.findOne({
-            _id: +_id
-        }, {
-            fields: {
-                passwd: 0,
-                resetKey: 0,
-                resetDate: 0,
-                loginAttempts: 0,
-                login: 0,
-                allmsg: 0
-            }
-        }, wrapCallback(callback));
-    },
+exports.getSocial = function (_id) {
+  return Thunk(function (callback) {
+    collection.findOne({
+      _id: _id
+    }, {
+      fields: {
+        name: 1,
+        email: 1,
+        social: 1
+      }
+    }, callback);
+  });
+};
 
-    setUserInfo: function (userObj, callback) {
-        var setObj = {},
-            newObj = {
-                name: '',
-                email: '',
-                passwd: '',
-                resetKey: '',
-                resetDate: 0,
-                locked: false,
-                sex: '',
-                role: 0,
-                avatar: '',
-                desc: '',
-                score: 0,
-                readtimestamp: 0,
-                tagsList: [0]
-            };
+exports.getUserInfo = function (_id) {
+  return Thunk(function (callback) {
+    collection.findOne({
+      _id: _id
+    }, {
+      fields: {
+        passwd: 0,
+        resetKey: 0,
+        resetDate: 0,
+        loginAttempts: 0,
+        login: 0,
+        allmsg: 0
+      }
+    }, callback);
+  });
+};
 
-        newObj = intersect(newObj, userObj);
-        setObj.$set = newObj;
-        if (callback) {
-            this.findAndModify({
-                _id: userObj._id
-            }, [], setObj, {
-                w: 1,
-                'new': true
-            }, wrapCallback(callback));
-        } else {
-            this.update({
-                _id: userObj._id
-            }, setObj, noop);
-        }
-    },
+exports.setUserInfo = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        name: '',
+        email: '',
+        passwd: '',
+        resetKey: '',
+        resetDate: 0,
+        locked: false,
+        sex: '',
+        role: 0,
+        avatar: '',
+        desc: '',
+        score: 0,
+        readtimestamp: 0,
+        tagsList: [0]
+      };
 
-    setLoginAttempt: function (userObj) {
-        var setObj = {},
-            newObj = {
-                loginAttempts: 0
-            };
+    newObj = intersect(newObj, userObj);
+    setObj.$set = newObj;
+    collection.findAndModify({
+      _id: userObj._id
+    }, [], setObj, {
+      w: 1,
+      'new': true
+    }, callback);
+  });
+};
 
-        newObj = intersect(newObj, userObj);
-        if (newObj.loginAttempts === 0) {
-            setObj.$set = newObj;
-        } else {
-            setObj.$inc = {
-                loginAttempts: 1
-            };
-        }
+exports.setLoginAttempt = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        loginAttempts: 0
+      };
 
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setLogin: function (userObj) {
-        var setObj = {},
-            newObj = {
-                lastLoginDate: 0,
-                login: {
-                    date: 0,
-                    ip: ''
-                }
-            };
-
-        newObj = intersect(newObj, userObj);
-        setObj.$set = {
-            lastLoginDate: newObj.lastLoginDate
-        };
-        setObj.$push = {
-            login: newObj.login
-        };
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setSocial: function (userObj, callback) {
-        var setObj = {
-            $set: {
-                'social.weibo': {},
-                'social.qq': {},
-                'social.google': {},
-                'social.baidu': {}
-            }
-        },
-            newObj = {
-                social: {
-                    weibo: {
-                        id: '',
-                        name: ''
-                    },
-                    qq: {
-                        id: '',
-                        name: ''
-                    },
-                    google: {
-                        id: '',
-                        name: ''
-                    },
-                    baidu: {
-                        id: '',
-                        name: ''
-                    }
-                }
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.social.weibo) {
-            setObj.$set['social.weibo'] = newObj.social.weibo;
-        } else {
-            delete setObj.$set['social.weibo'];
-        }
-        if (newObj.social.qq) {
-            setObj.$set['social.qq'] = newObj.social.qq;
-        } else {
-            delete setObj.$set['social.qq'];
-        }
-        if (newObj.social.google) {
-            setObj.$set['social.google'] = newObj.social.google;
-        } else {
-            delete setObj.$set['social.google'];
-        }
-        if (newObj.social.baidu) {
-            setObj.$set['social.baidu'] = newObj.social.baidu;
-        } else {
-            delete setObj.$set['social.baidu'];
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, {
-            w: 1
-        }, wrapCallback(callback));
-    },
-
-    setFans: function (userObj) {
-        var setObj = {},
-            newObj = {
-                fansList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.fansList < 0) {
-            newObj.fansList = -newObj.fansList;
-            setObj.$inc = {
-                fans: -1
-            };
-            setObj.$pull = {
-                fansList: newObj.fansList
-            };
-        } else {
-            setObj.$inc = {
-                fans: 1
-            };
-            setObj.$push = {
-                fansList: newObj.fansList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setFollow: function (userObj, callback) {
-        var setObj = {},
-            newObj = {
-                followList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.followList < 0) {
-            newObj.followList = -newObj.followList;
-            setObj.$inc = {
-                follow: -1
-            };
-            setObj.$pull = {
-                followList: newObj.followList
-            };
-        } else {
-            setObj.$inc = {
-                follow: 1
-            };
-            setObj.$push = {
-                followList: newObj.followList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, {
-            w: 1
-        }, wrapCallback(callback));
-    },
-
-    setArticle: function (userObj, callback) {
-        var setObj = {},
-            newObj = {
-                articlesList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.articlesList < 0) {
-            newObj.articlesList = -newObj.articlesList;
-            setObj.$inc = {
-                articles: -1
-            };
-            setObj.$pull = {
-                articlesList: newObj.articlesList
-            };
-        } else {
-            setObj.$inc = {
-                articles: 1
-            };
-            setObj.$push = {
-                articlesList: newObj.articlesList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, {
-            w: 1
-        }, wrapCallback(callback));
-    },
-
-    setCollection: function (userObj, callback) {
-        var setObj = {},
-            newObj = {
-                collectionsList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.collectionsList < 0) {
-            newObj.collectionsList = -newObj.collectionsList;
-            setObj.$inc = {
-                collections: -1
-            };
-            setObj.$pull = {
-                collectionsList: newObj.collectionsList
-            };
-        } else {
-            setObj.$inc = {
-                collections: 1
-            };
-            setObj.$push = {
-                collectionsList: newObj.collectionsList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, {
-            w: 1
-        }, wrapCallback(callback));
-    },
-
-    setMark: function (userObj) {
-        var setObj = {},
-            newObj = {
-                markList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.markList < 0) {
-            newObj.markList = -newObj.markList;
-            setObj.$pull = {
-                markList: newObj.markList
-            };
-        } else {
-            setObj.$push = {
-                markList: newObj.markList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setMessages: function (userObj) {
-        var setObj = {},
-            newObj = {
-                unread: {},
-                allmsg: {}
-            };
-
-        newObj = intersect(newObj, userObj);
-        setObj.$push = {
-            unread: newObj.unread,
-            allmsg: newObj.allmsg
-        };
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    delMessages: function (userObj) {
-        var setObj = {},
-            newObj = {
-                unread: {},
-                allmsg: {}
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.receiveList < 0) {
-            newObj.receiveList = -newObj.receiveList;
-            setObj.$pull = {
-                receiveList: newObj.receiveList
-            };
-        } else {
-            setObj.$push = {
-                receiveList: newObj.receiveList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setReceive: function (userObj) {
-        var setObj = {},
-            newObj = {
-                receiveList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.receiveList < 0) {
-            newObj.receiveList = -newObj.receiveList;
-            setObj.$pull = {
-                receiveList: newObj.receiveList
-            };
-        } else {
-            setObj.$push = {
-                receiveList: newObj.receiveList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setSend: function (userObj) {
-        var setObj = {},
-            newObj = {
-                sendList: 0
-            };
-
-        newObj = intersect(newObj, userObj);
-        if (newObj.sendList < 0) {
-            newObj.sendList = -newObj.sendList;
-            setObj.$pull = {
-                sendList: newObj.sendList
-            };
-        } else {
-            setObj.$push = {
-                sendList: newObj.sendList
-            };
-        }
-
-        this.update({
-            _id: userObj._id
-        }, setObj, noop);
-    },
-
-    setNewUser: function (userObj, callback) {
-        var that = this,
-            user = union(defautUser),
-            newUser = union(defautUser);
-        callback = callback || callbackFn;
-
-        newUser = intersect(newUser, userObj);
-        newUser = union(user, newUser);
-        newUser.date = Date.now();
-        newUser.lastLoginDate = newUser.date;
-        newUser.readtimestamp = newUser.date;
-
-        this.getLatestId(function (err, doc) {
-            if (err) {
-                return callback(err, null);
-            }
-            if (!doc) {
-                preAllocate._id = newUser._id || 1;
-            } else {
-                preAllocate._id = doc._id + 1;
-            }
-            delete newUser._id;
-            that.insert(
-                preAllocate, {
-                    w: 1
-                }, function (err, doc) {
-                    if (err) {
-                        return callback(err, doc);
-                    }
-                    that.findAndModify({
-                        _id: preAllocate._id
-                    }, [], newUser, {
-                        w: 1,
-                        'new': true
-                    }, wrapCallback(callback));
-                });
-        });
+    newObj = intersect(newObj, userObj);
+    if (newObj.loginAttempts === 0) {
+      setObj.$set = newObj;
+    } else {
+      setObj.$inc = {
+        loginAttempts: 1
+      };
     }
-});
 
-module.exports = {
-    convertID: users.convertID,
-    getUsersNum: users.getUsersNum,
-    getUsersIndex: users.getUsersIndex,
-    getFullUsersIndex: users.getFullUsersIndex,
-    getLatestId: users.getLatestId,
-    getAuth: users.getAuth,
-    getSocial: users.getSocial,
-    getUserInfo: users.getUserInfo,
-    setUserInfo: users.setUserInfo,
-    setLoginAttempt: users.setLoginAttempt,
-    setLogin: users.setLogin,
-    setSocial: users.setSocial,
-    setFans: users.setFans,
-    setFollow: users.setFollow,
-    setArticle: users.setArticle,
-    setCollection: users.setCollection,
-    setMark: users.setMark,
-    setMessages: users.setMessages,
-    setReceive: users.setReceive,
-    setSend: users.setSend,
-    setNewUser: users.setNewUser
+    collection.update({
+      _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setLogin = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        lastLoginDate: 0,
+        login: {
+          date: 0,
+          ip: ''
+        }
+      };
+
+    newObj = intersect(newObj, userObj);
+    setObj.$set = {
+      lastLoginDate: newObj.lastLoginDate
+    };
+    setObj.$push = {
+      login: newObj.login
+    };
+    collection.update({
+        _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setSocial = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {
+      $set: {
+        'social.weibo': {},
+        'social.qq': {},
+        'social.google': {},
+        'social.baidu': {}
+      }
+    },
+      newObj = {
+        social: {
+          weibo: {
+            id: '',
+            name: ''
+          },
+          qq: {
+            id: '',
+            name: ''
+          },
+          google: {
+            id: '',
+            name: ''
+          },
+          baidu: {
+            id: '',
+            name: ''
+          }
+        }
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.social.weibo) {
+      setObj.$set['social.weibo'] = newObj.social.weibo;
+    } else {
+      delete setObj.$set['social.weibo'];
+    }
+    if (newObj.social.qq) {
+      setObj.$set['social.qq'] = newObj.social.qq;
+    } else {
+      delete setObj.$set['social.qq'];
+    }
+    if (newObj.social.google) {
+      setObj.$set['social.google'] = newObj.social.google;
+    } else {
+      delete setObj.$set['social.google'];
+    }
+    if (newObj.social.baidu) {
+      setObj.$set['social.baidu'] = newObj.social.baidu;
+    } else {
+      delete setObj.$set['social.baidu'];
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, {
+      w: 1
+    }, callback);
+  });
+};
+
+exports.setFans = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        fansList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.fansList < 0) {
+      newObj.fansList = -newObj.fansList;
+      setObj.$inc = {
+        fans: -1
+      };
+      setObj.$pull = {
+        fansList: newObj.fansList
+      };
+    } else {
+      setObj.$inc = {
+        fans: 1
+      };
+      setObj.$push = {
+        fansList: newObj.fansList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setFollow = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        followList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.followList < 0) {
+      newObj.followList = -newObj.followList;
+      setObj.$inc = {
+        follow: -1
+      };
+      setObj.$pull = {
+        followList: newObj.followList
+      };
+    } else {
+      setObj.$inc = {
+        follow: 1
+      };
+      setObj.$push = {
+        followList: newObj.followList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, {
+      w: 1
+    }, callback);
+  });
+};
+
+exports.setArticle = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        articlesList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.articlesList < 0) {
+      newObj.articlesList = -newObj.articlesList;
+      setObj.$inc = {
+        articles: -1
+      };
+      setObj.$pull = {
+        articlesList: newObj.articlesList
+      };
+    } else {
+      setObj.$inc = {
+        articles: 1
+      };
+      setObj.$push = {
+        articlesList: newObj.articlesList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, {
+      w: 1
+    }, callback);
+  });
+};
+
+exports.setCollection = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        collectionsList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.collectionsList < 0) {
+      newObj.collectionsList = -newObj.collectionsList;
+      setObj.$inc = {
+        collections: -1
+      };
+      setObj.$pull = {
+        collectionsList: newObj.collectionsList
+      };
+    } else {
+      setObj.$inc = {
+        collections: 1
+      };
+      setObj.$push = {
+        collectionsList: newObj.collectionsList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, {
+      w: 1
+    }, callback);
+  });
+};
+
+exports.setMark = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        markList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.markList < 0) {
+      newObj.markList = -newObj.markList;
+      setObj.$pull = {
+        markList: newObj.markList
+      };
+    } else {
+      setObj.$push = {
+        markList: newObj.markList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setMessages = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        unread: {},
+        allmsg: {}
+      };
+
+    newObj = intersect(newObj, userObj);
+    setObj.$push = {
+      unread: newObj.unread,
+      allmsg: newObj.allmsg
+    };
+
+    collection.update({
+        _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.delMessages = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        unread: {},
+        allmsg: {}
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.receiveList < 0) {
+      newObj.receiveList = -newObj.receiveList;
+      setObj.$pull = {
+        receiveList: newObj.receiveList
+      };
+    } else {
+      setObj.$push = {
+        receiveList: newObj.receiveList
+      };
+    }
+
+    collection.update({
+        _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setReceive = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        receiveList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.receiveList < 0) {
+      newObj.receiveList = -newObj.receiveList;
+      setObj.$pull = {
+        receiveList: newObj.receiveList
+      };
+    } else {
+      setObj.$push = {
+        receiveList: newObj.receiveList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setSend = function (userObj) {
+  return Thunk(function (callback) {
+    var setObj = {},
+      newObj = {
+        sendList: 0
+      };
+
+    newObj = intersect(newObj, userObj);
+    if (newObj.sendList < 0) {
+      newObj.sendList = -newObj.sendList;
+      setObj.$pull = {
+        sendList: newObj.sendList
+      };
+    } else {
+      setObj.$push = {
+        sendList: newObj.sendList
+      };
+    }
+
+    collection.update({
+      _id: userObj._id
+    }, setObj, callback);
+  });
+};
+
+exports.setNewUser = function (userObj) {
+  return Thunk(function (callback) {
+    dao.getLatestId(collection)(function (err, doc) {
+      if (err) return callback(err);
+      var user = union(defautUser),
+        newUser = union(defautUser);
+
+      newUser = intersect(newUser, userObj);
+      newUser = union(user, newUser);
+      newUser.date = Date.now();
+      newUser.lastLoginDate = newUser.date;
+      newUser.readtimestamp = newUser.date;
+
+      if (!doc) {
+        preAllocate._id = newUser._id || 1;
+      } else {
+        preAllocate._id = doc._id + 1;
+      }
+      delete newUser._id;
+      collection.insert(preAllocate, {
+        w: 1
+      }, function (err, doc) {
+        if (err) return callback(err);
+        collection.findAndModify({
+          _id: preAllocate._id
+        }, [], newUser, {
+          w: 1,
+          'new': true
+        }, callback);
+      });
+    });
+  });
 };
